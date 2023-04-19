@@ -98,6 +98,12 @@ new_token(enum token_kind kind, struct token *cur, char *str, int len)
 	return tok;
 }
 
+static bool
+startswith(char *p, char *q)
+{
+	return strncmp(p, q, strlen(q)) == 0;
+}
+
 // Tokenizes `current_input` and returns new tokens.
 static struct token *
 tokenize(void)
@@ -122,7 +128,15 @@ tokenize(void)
 			continue;
 		}
 
-		// Punctuation
+		// Multi-letter punctuation
+		if (startswith(p, "==") || startswith(p, "!=") ||
+		    startswith(p, "<=") || startswith(p, ">=")) {
+			cur = new_token(TK_RESERVED, cur, p, 2);
+			p += 2;
+			continue;
+		}
+
+		// Single-letter punctuation
 		if (ispunct(*p)) {
 			cur = new_token(TK_RESERVED, cur, p++, 1);
 			continue;
@@ -144,6 +158,10 @@ enum node_kind {
 	ND_SUB, // -
 	ND_MUL, // *
 	ND_DIV, // /
+	ND_EQ,  // ==
+	ND_NE,  // !=
+	ND_LT,  // <
+	ND_LE,  // <=
 	ND_NUM, // Integer
 };
 
@@ -183,6 +201,15 @@ static struct node *
 expr(struct token **rest, struct token *tok);
 
 static struct node *
+equality(struct token **rest, struct token *tok);
+
+static struct node *
+relational(struct token **rest, struct token *tok);
+
+static struct node *
+add(struct token **rest, struct token *tok);
+
+static struct node *
 mul(struct token **rest, struct token *tok);
 
 static struct node *
@@ -191,9 +218,76 @@ unary(struct token **rest, struct token *tok);
 static struct node *
 primary(struct token **rest, struct token *tok);
 
-// expr = mul ("+" mul | "-" mul)*
+// expr = equality
 static struct node *
 expr(struct token **rest, struct token *tok)
+{
+	return equality(rest, tok);
+}
+
+// equality = relational ("==" relational | "!=" relational)*
+static struct node *
+equality(struct token **rest, struct token *tok)
+{
+	struct node *node = relational(&tok, tok);
+
+	for (;;) {
+		if (equal(tok, "==")) {
+			struct node *rhs = relational(&tok, tok->next);
+			node = new_binary(ND_EQ, node, rhs);
+			continue;
+		}
+
+		if (equal(tok, "!=")) {
+			struct node *rhs = relational(&tok, tok->next);
+			node = new_binary(ND_NE, node, rhs);
+			continue;
+		}
+
+		*rest = tok;
+		return node;
+	}
+}
+
+// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
+static struct node *
+relational(struct token **rest, struct token *tok)
+{
+	struct node *node = add(&tok, tok);
+
+	for (;;) {
+		if (equal(tok, "<")) {
+			struct node *rhs = add(&tok, tok->next);
+			node = new_binary(ND_LT, node, rhs);
+			continue;
+		}
+
+		if (equal(tok, "<=")) {
+			struct node *rhs = add(&tok, tok->next);
+			node = new_binary(ND_LE, node, rhs);
+			continue;
+		}
+
+		if (equal(tok, ">")) {
+			struct node *rhs = add(&tok, tok->next);
+			node = new_binary(ND_LT, rhs, node);
+			continue;
+		}
+
+		if (equal(tok, ">=")) {
+			struct node *rhs = add(&tok, tok->next);
+			node = new_binary(ND_LE, rhs, node);
+			continue;
+		}
+
+		*rest = tok;
+		return node;
+	}
+}
+
+// add = mul ("+" mul | "-" mul)*
+static struct node *
+add(struct token **rest, struct token *tok)
 {
 	struct node *node = mul(&tok, tok);
 
@@ -319,6 +413,25 @@ gen_expr(struct node *node)
 		printf("\tcqo\n");
 		printf("\tidiv\trdi\n");
 		return;
+
+	case ND_EQ:
+	case ND_NE:
+	case ND_LT:
+	case ND_LE:
+		printf("\tcmp\trax, rdi\n");
+
+		if (node->kind == ND_EQ)
+			printf("\tsete\tal\n");
+		else if (node->kind == ND_NE)
+			printf("\tsetne\tal\n");
+		else if (node->kind == ND_LT)
+			printf("\tsetl\tal\n");
+		else if (node->kind == ND_LE)
+			printf("\tsetle\tal\n");
+
+		printf("\tmovzx\trax, al\n");
+		return;
+
 	default:
 		error("invalid expression");
 	}
