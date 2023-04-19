@@ -19,6 +19,9 @@ struct token {
 	int len;              // token length
 };
 
+// Input string
+static char *current_input;
+
 // Reports an error and exits.
 static void
 error(char *fmt, ...)
@@ -29,6 +32,37 @@ error(char *fmt, ...)
 	va_end(ap);
 	fprintf(stderr, "\n");
 	exit(1);
+}
+
+// Reports an error location and exits.
+static void
+verror_at(char *loc, char *fmt, va_list ap)
+{
+	int pos = loc - current_input;
+	fprintf(stderr, "%s\n", current_input);
+	fprintf(stderr, "%*s", pos, ""); // print `pos` spaces.
+	fprintf(stderr, "^ ");
+	vfprintf(stderr, fmt, ap);
+	fprintf(stderr, "\n");
+	exit(1);
+}
+
+static void
+error_at(char *loc, char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	verror_at(loc, fmt, ap);
+	va_end(ap);
+}
+
+static void
+error_tok(struct token *tok, char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	verror_at(tok->loc, fmt, ap);
+	va_end(ap);
 }
 
 // Consumes the current token if it matches `s`.
@@ -43,7 +77,7 @@ static struct token *
 skip(struct token *tok, char *s)
 {
 	if (!equal(tok, s))
-		error("expected '%s'", s);
+		error_tok(tok, "expected '%s'", s);
 	return tok->next;
 }
 
@@ -52,7 +86,7 @@ static int
 get_number(struct token *tok)
 {
 	if (tok->kind != TK_NUM)
-		error("expected a number");
+		error_tok(tok, "expected a number");
 	return tok->val;
 }
 
@@ -68,10 +102,11 @@ new_token(enum token_kind kind, struct token *cur, char *str, int len)
 	return tok;
 }
 
-// Tokenizes `p` and returns new tokens.
+// Tokenizes `current_input` and returns new tokens.
 static struct token *
-tokenize(char *p)
+tokenize(void)
 {
+	char *p = current_input;
 	struct token head = {0};
 	struct token *cur = &head;
 
@@ -97,7 +132,7 @@ tokenize(char *p)
 			continue;
 		}
 
-		error("invalid token");
+		error_at(p, "invalid token");
 	}
 
 	new_token(TK_EOF, cur, p, 0);
@@ -110,7 +145,8 @@ main(int argc, char **argv)
 	if (argc != 2)
 		error("%s: invalid number of arguments\n", argv[0]);
 
-	struct token *tok = tokenize(argv[1]);
+	current_input = argv[1];
+	struct token *tok = tokenize();
 
 	printf(".intel_syntax noprefix\n");
 	printf(".global _main\n");
