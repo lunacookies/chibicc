@@ -186,6 +186,9 @@ static struct node *
 mul(struct token **rest, struct token *tok);
 
 static struct node *
+unary(struct token **rest, struct token *tok);
+
+static struct node *
 primary(struct token **rest, struct token *tok);
 
 // expr = mul ("+" mul | "-" mul)*
@@ -212,21 +215,21 @@ expr(struct token **rest, struct token *tok)
 	}
 }
 
-// mul = primary ("*" primary | "/" primary)*
+// mul = unary ("*" unary | "/" unary)*
 static struct node *
 mul(struct token **rest, struct token *tok)
 {
-	struct node *node = primary(&tok, tok);
+	struct node *node = unary(&tok, tok);
 
 	for (;;) {
 		if (equal(tok, "*")) {
-			struct node *rhs = primary(&tok, tok->next);
+			struct node *rhs = unary(&tok, tok->next);
 			node = new_binary(ND_MUL, node, rhs);
 			continue;
 		}
 
 		if (equal(tok, "/")) {
-			struct node *rhs = primary(&tok, tok->next);
+			struct node *rhs = unary(&tok, tok->next);
 			node = new_binary(ND_DIV, node, rhs);
 			continue;
 		}
@@ -234,6 +237,20 @@ mul(struct token **rest, struct token *tok)
 		*rest = tok;
 		return node;
 	}
+}
+
+// unary = ("+" | "-") unary
+//       | primary
+static struct node *
+unary(struct token **rest, struct token *tok)
+{
+	if (equal(tok, "+"))
+		return unary(rest, tok->next);
+
+	if (equal(tok, "-"))
+		return new_binary(ND_SUB, new_num(0), unary(rest, tok->next));
+
+	return primary(rest, tok);
 }
 
 // primary = "(" expr ")" | num
