@@ -1,9 +1,14 @@
+#include <assert.h>
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+//
+// Tokenizer
+//
 
 enum token_kind {
 	TK_RESERVED, // keywords or punctuation
@@ -23,7 +28,7 @@ struct token {
 static char *current_input;
 
 // Reports an error and exits.
-static void
+static _Noreturn void
 error(char *fmt, ...)
 {
 	va_list ap;
@@ -35,7 +40,7 @@ error(char *fmt, ...)
 }
 
 // Reports an error location and exits.
-static void
+static _Noreturn void
 verror_at(char *loc, char *fmt, va_list ap)
 {
 	int pos = loc - current_input;
@@ -47,7 +52,7 @@ verror_at(char *loc, char *fmt, va_list ap)
 	exit(1);
 }
 
-static void
+static _Noreturn void
 error_at(char *loc, char *fmt, ...)
 {
 	va_list ap;
@@ -56,7 +61,7 @@ error_at(char *loc, char *fmt, ...)
 	va_end(ap);
 }
 
-static void
+static _Noreturn void
 error_tok(struct token *tok, char *fmt, ...)
 {
 	va_list ap;
@@ -79,15 +84,6 @@ skip(struct token *tok, char *s)
 	if (!equal(tok, s))
 		error_tok(tok, "expected '%s'", s);
 	return tok->next;
-}
-
-// Ensures that the current token is TK_NUM.
-static int
-get_number(struct token *tok)
-{
-	if (tok->kind != TK_NUM)
-		error_tok(tok, "expected a number");
-	return tok->val;
 }
 
 // Creates a new token and adds it as the next token of `cur`.
@@ -127,7 +123,7 @@ tokenize(void)
 		}
 
 		// Punctuation
-		if (*p == '+' || *p == '-') {
+		if (ispunct(*p)) {
 			cur = new_token(TK_RESERVED, cur, p++, 1);
 			continue;
 		}
@@ -139,35 +135,199 @@ tokenize(void)
 	return head.next;
 }
 
+//
+// Parser
+//
+
+enum node_kind {
+	ND_ADD, // +
+	ND_SUB, // -
+	ND_MUL, // *
+	ND_DIV, // /
+	ND_NUM, // Integer
+};
+
+struct node {
+	enum node_kind kind; // node kind
+	struct node *lhs;    // left-hand side
+	struct node *rhs;    // right-hand side
+	int val;             // used if kind == ND_NUM
+};
+
+static struct node *
+new_node(enum node_kind kind)
+{
+	struct node *node = calloc(1, sizeof(struct node));
+	node->kind = kind;
+	return node;
+}
+
+static struct node *
+new_binary(enum node_kind kind, struct node *lhs, struct node *rhs)
+{
+	struct node *node = new_node(kind);
+	node->lhs = lhs;
+	node->rhs = rhs;
+	return node;
+}
+
+static struct node *
+new_num(int val)
+{
+	struct node *node = new_node(ND_NUM);
+	node->val = val;
+	return node;
+}
+
+static struct node *
+expr(struct token **rest, struct token *tok);
+
+static struct node *
+mul(struct token **rest, struct token *tok);
+
+static struct node *
+primary(struct token **rest, struct token *tok);
+
+// expr = mul ("+" mul | "-" mul)*
+static struct node *
+expr(struct token **rest, struct token *tok)
+{
+	struct node *node = mul(&tok, tok);
+
+	for (;;) {
+		if (equal(tok, "+")) {
+			struct node *rhs = mul(&tok, tok->next);
+			node = new_binary(ND_ADD, node, rhs);
+			continue;
+		}
+
+		if (equal(tok, "-")) {
+			struct node *rhs = mul(&tok, tok->next);
+			node = new_binary(ND_SUB, node, rhs);
+			continue;
+		}
+
+		*rest = tok;
+		return node;
+	}
+}
+
+// mul = primary ("*" primary | "/" primary)*
+static struct node *
+mul(struct token **rest, struct token *tok)
+{
+	struct node *node = primary(&tok, tok);
+
+	for (;;) {
+		if (equal(tok, "*")) {
+			struct node *rhs = primary(&tok, tok->next);
+			node = new_binary(ND_MUL, node, rhs);
+			continue;
+		}
+
+		if (equal(tok, "/")) {
+			struct node *rhs = primary(&tok, tok->next);
+			node = new_binary(ND_DIV, node, rhs);
+			continue;
+		}
+
+		*rest = tok;
+		return node;
+	}
+}
+
+// primary = "(" expr ")" | num
+static struct node *
+primary(struct token **rest, struct token *tok)
+{
+	if (equal(tok, "(")) {
+		struct node *node = expr(&tok, tok->next);
+		*rest = skip(tok, ")");
+		return node;
+	}
+
+	if (tok->kind == TK_NUM) {
+		struct node *node = new_num(tok->val);
+		*rest = tok->next;
+		return node;
+	}
+
+	error_tok(tok, "expected an expression");
+}
+
+//
+// Code generator
+//
+
+static int depth;
+
+static void
+push(void)
+{
+	printf("\tpush\trax\n");
+	depth++;
+}
+
+static void
+pop(char *arg)
+{
+	printf("\tpop\t%s\n", arg);
+	depth--;
+}
+
+static void
+gen_expr(struct node *node)
+{
+	if (node->kind == ND_NUM) {
+		printf("\tmov\trax, %d\n", node->val);
+		return;
+	}
+
+	gen_expr(node->rhs);
+	push();
+	gen_expr(node->lhs);
+	pop("rdi");
+
+	switch (node->kind) {
+	case ND_ADD:
+		printf("\tadd\trax, rdi\n");
+		return;
+	case ND_SUB:
+		printf("\tsub\trax, rdi\n");
+		return;
+	case ND_MUL:
+		printf("\timul\trax, rdi\n");
+		return;
+	case ND_DIV:
+		printf("\tcqo\n");
+		printf("\tidiv\trdi\n");
+		return;
+	default:
+		error("invalid expression");
+	}
+}
+
 int
 main(int argc, char **argv)
 {
 	if (argc != 2)
 		error("%s: invalid number of arguments\n", argv[0]);
 
+	// Tokenize and parse.
 	current_input = argv[1];
 	struct token *tok = tokenize();
+	struct node *node = expr(&tok, tok);
+
+	if (tok->kind != TK_EOF)
+		error_tok(tok, "extra token");
 
 	printf(".intel_syntax noprefix\n");
 	printf(".global _main\n");
 	printf("_main:\n");
 
-	// The first token must be a number ...
-	printf("\tmov\trax, %d\n", get_number(tok));
-	tok = tok->next;
-
-	// ... followed by either `+ <number>` or `- <number>`.
-	while (tok->kind != TK_EOF) {
-		if (equal(tok, "+")) {
-			printf("\tadd\trax, %d\n", get_number(tok->next));
-			tok = tok->next->next;
-			continue;
-		}
-
-		tok = skip(tok, "-");
-		printf("\tsub\trax, %d\n", get_number(tok));
-		tok = tok->next;
-	}
-
+	// Traverse the AST to emit assembly.
+	gen_expr(node);
 	printf("\tret\n");
+
+	assert(depth == 0);
 }
