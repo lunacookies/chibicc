@@ -47,19 +47,21 @@ tokenize(char *input);
 //
 
 enum node_kind {
-	ND_ADD, // +
-	ND_SUB, // -
-	ND_MUL, // *
-	ND_DIV, // /
-	ND_EQ,  // ==
-	ND_NE,  // !=
-	ND_LT,  // <
-	ND_LE,  // <=
-	ND_NUM, // Integer
+	ND_ADD,       // +
+	ND_SUB,       // -
+	ND_MUL,       // *
+	ND_DIV,       // /
+	ND_EQ,        // ==
+	ND_NE,        // !=
+	ND_LT,        // <
+	ND_LE,        // <=
+	ND_EXPR_STMT, // expression statement
+	ND_NUM,       // integer
 };
 
 struct node {
 	enum node_kind kind; // node kind
+	struct node *next;   // next node
 	struct node *lhs;    // left-hand side
 	struct node *rhs;    // right-hand side
 	int val;             // used if kind == ND_NUM

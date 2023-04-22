@@ -1,32 +1,10 @@
 #include "chibicc.h"
 
 static struct node *
-new_node(enum node_kind kind)
-{
-	struct node *node = calloc(1, sizeof(struct node));
-	node->kind = kind;
-	return node;
-}
-
-static struct node *
-new_binary(enum node_kind kind, struct node *lhs, struct node *rhs)
-{
-	struct node *node = new_node(kind);
-	node->lhs = lhs;
-	node->rhs = rhs;
-	return node;
-}
-
-static struct node *
-new_num(int val)
-{
-	struct node *node = new_node(ND_NUM);
-	node->val = val;
-	return node;
-}
-
-static struct node *
 expr(struct token **rest, struct token *tok);
+
+static struct node *
+expr_stmt(struct token **rest, struct token *tok);
 
 static struct node *
 equality(struct token **rest, struct token *tok);
@@ -45,6 +23,55 @@ unary(struct token **rest, struct token *tok);
 
 static struct node *
 primary(struct token **rest, struct token *tok);
+
+static struct node *
+new_node(enum node_kind kind)
+{
+	struct node *node = calloc(1, sizeof(struct node));
+	node->kind = kind;
+	return node;
+}
+
+static struct node *
+new_binary(enum node_kind kind, struct node *lhs, struct node *rhs)
+{
+	struct node *node = new_node(kind);
+	node->lhs = lhs;
+	node->rhs = rhs;
+	return node;
+}
+
+static struct node *
+new_unary(enum node_kind kind, struct node *expr)
+{
+	struct node *node = new_node(kind);
+	node->lhs = expr;
+	return node;
+}
+
+static struct node *
+new_num(int val)
+{
+	struct node *node = new_node(ND_NUM);
+	node->val = val;
+	return node;
+}
+
+// stmt = expr-stmt
+static struct node *
+stmt(struct token **rest, struct token *tok)
+{
+	return expr_stmt(rest, tok);
+}
+
+// expr-stmt = expr ";"
+static struct node *
+expr_stmt(struct token **rest, struct token *tok)
+{
+	struct node *node = new_unary(ND_EXPR_STMT, expr(&tok, tok));
+	*rest = skip(tok, ";");
+	return node;
+}
 
 // expr = equality
 static struct node *
@@ -197,8 +224,9 @@ primary(struct token **rest, struct token *tok)
 struct node *
 parse(struct token *tok)
 {
-	struct node *node = expr(&tok, tok);
-	if (tok->kind != TK_EOF)
-		error_tok(tok, "extra token");
-	return node;
+	struct node head = {0};
+	struct node *cur = &head;
+	while (tok->kind != TK_EOF)
+		cur = cur->next = stmt(&tok, tok);
+	return head.next;
 }

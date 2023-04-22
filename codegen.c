@@ -67,6 +67,17 @@ gen_expr(struct node *node)
 	}
 }
 
+static void
+gen_stmt(struct node *node)
+{
+	if (node->kind == ND_EXPR_STMT) {
+		gen_expr(node->lhs);
+		return;
+	}
+
+	error("invalid statement");
+}
+
 void
 codegen(struct node *node)
 {
@@ -74,8 +85,10 @@ codegen(struct node *node)
 	printf(".global _main\n");
 	printf("_main:\n");
 
-	gen_expr(node);
-	printf("\tret\n");
+	for (struct node *n = node; n; n = n->next) {
+		gen_stmt(n);
+		assert(depth == 0);
+	}
 
-	assert(depth == 0);
+	printf("\tret\n");
 }
