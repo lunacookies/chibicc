@@ -7,6 +7,9 @@ static struct node *
 expr_stmt(struct token **rest, struct token *tok);
 
 static struct node *
+assign(struct token **rest, struct token *tok);
+
+static struct node *
 equality(struct token **rest, struct token *tok);
 
 static struct node *
@@ -57,6 +60,14 @@ new_num(int val)
 	return node;
 }
 
+static struct node *
+new_var_node(char name)
+{
+	struct node *node = new_node(ND_VAR);
+	node->name = name;
+	return node;
+}
+
 // stmt = expr-stmt
 static struct node *
 stmt(struct token **rest, struct token *tok)
@@ -73,11 +84,22 @@ expr_stmt(struct token **rest, struct token *tok)
 	return node;
 }
 
-// expr = equality
+// expr = assign
 static struct node *
 expr(struct token **rest, struct token *tok)
 {
-	return equality(rest, tok);
+	return assign(rest, tok);
+}
+
+// assign = equality ("=" assign)?
+static struct node *
+assign(struct token **rest, struct token *tok)
+{
+	struct node *node = equality(&tok, tok);
+	if (equal(tok, "="))
+		node = new_binary(ND_ASSIGN, node, assign(&tok, tok->next));
+	*rest = tok;
+	return node;
 }
 
 // equality = relational ("==" relational | "!=" relational)*
@@ -202,13 +224,19 @@ unary(struct token **rest, struct token *tok)
 	return primary(rest, tok);
 }
 
-// primary = "(" expr ")" | num
+// primary = "(" expr ")" | ident | num
 static struct node *
 primary(struct token **rest, struct token *tok)
 {
 	if (equal(tok, "(")) {
 		struct node *node = expr(&tok, tok->next);
 		*rest = skip(tok, ")");
+		return node;
+	}
+
+	if (tok->kind == TK_IDENT) {
+		struct node *node = new_var_node(*tok->loc);
+		*rest = tok->next;
 		return node;
 	}
 

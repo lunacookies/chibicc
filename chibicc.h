@@ -12,6 +12,7 @@
 
 enum token_kind {
 	TK_RESERVED, // keywords or punctuation
+	TK_IDENT,    // identifiers
 	TK_NUM,      // numeric literals
 	TK_EOF,      // end-of-file markers
 };
@@ -55,7 +56,9 @@ enum node_kind {
 	ND_NE,        // !=
 	ND_LT,        // <
 	ND_LE,        // <=
+	ND_ASSIGN,    // =
 	ND_EXPR_STMT, // expression statement
+	ND_VAR,       // variable
 	ND_NUM,       // integer
 };
 
@@ -64,6 +67,7 @@ struct node {
 	struct node *next;   // next node
 	struct node *lhs;    // left-hand side
 	struct node *rhs;    // right-hand side
+	char name;           // used if kind == ND_VAR
 	int val;             // used if kind == ND_NUM
 };
 

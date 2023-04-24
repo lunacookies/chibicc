@@ -16,12 +16,41 @@ pop(char *arg)
 	depth--;
 }
 
+// Compute the absolute address of a given node.
+// It’s an error if a given node does not reside in memory.
+static void
+gen_addr(struct node *node)
+{
+	if (node->kind == ND_VAR) {
+		int offset = (node->name - 'a' + 1) * 8;
+		printf("\tlea\trax, [rbp - %d]\n", offset);
+		return;
+	}
+
+	error("not an lvalue");
+}
+
+// Generate code for a given node.
 static void
 gen_expr(struct node *node)
 {
-	if (node->kind == ND_NUM) {
+	switch (node->kind) {
+	case ND_NUM:
 		printf("\tmov\trax, %d\n", node->val);
 		return;
+	case ND_VAR:
+		gen_addr(node);
+		printf("\tmov\trax, [rax]\n");
+		return;
+	case ND_ASSIGN:
+		gen_addr(node->lhs);
+		push();
+		gen_expr(node->rhs);
+		pop("rdi");
+		printf("\tmov\t[rdi], rax\n");
+		return;
+	default:
+		break;
 	}
 
 	gen_expr(node->rhs);
@@ -85,10 +114,17 @@ codegen(struct node *node)
 	printf(".global _main\n");
 	printf("_main:\n");
 
+	// Prologue
+	printf("\tpush\trbp\n");
+	printf("\tmov\trbp, rsp\n");
+	printf("\tsub\trsp, 208\n");
+
 	for (struct node *n = node; n; n = n->next) {
 		gen_stmt(n);
 		assert(depth == 0);
 	}
 
+	printf("\tmov\trsp, rbp\n");
+	printf("\tpop\trbp\n");
 	printf("\tret\n");
 }
