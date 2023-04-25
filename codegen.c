@@ -107,6 +107,10 @@ static void
 gen_stmt(struct node *node)
 {
 	switch (node->kind) {
+	case ND_BLOCK:
+		for (struct node *n = node->body; n; n = n->next)
+			gen_stmt(n);
+		return;
 	case ND_RETURN:
 		gen_expr(node->lhs);
 		printf("\tjmp\t.L.return\n");
@@ -147,10 +151,8 @@ codegen(struct function *prog)
 	printf("\tmov\trbp, rsp\n");
 	printf("\tsub\trsp, %d\n", prog->stack_size);
 
-	for (struct node *n = prog->body; n; n = n->next) {
-		gen_stmt(n);
-		assert(depth == 0);
-	}
+	gen_stmt(prog->body);
+	assert(depth == 0);
 
 	printf(".L.return:\n");
 	printf("\tmov\trsp, rbp\n");

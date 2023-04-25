@@ -5,6 +5,9 @@
 struct var *locals;
 
 static struct node *
+compound_stmt(struct token **rest, struct token *tok);
+
+static struct node *
 expr(struct token **rest, struct token *tok);
 
 static struct node *
@@ -94,6 +97,7 @@ new_lvar(char *name)
 }
 
 // stmt = "return" expr ";"
+//      | "{" compound-stmt
 //      | expr-stmt
 static struct node *
 stmt(struct token **rest, struct token *tok)
@@ -104,7 +108,25 @@ stmt(struct token **rest, struct token *tok)
 		return node;
 	}
 
+	if (equal(tok, "{"))
+		return compound_stmt(rest, tok->next);
+
 	return expr_stmt(rest, tok);
+}
+
+// compound-stmt = stmt* "}"
+static struct node *
+compound_stmt(struct token **rest, struct token *tok)
+{
+	struct node head = {0};
+	struct node *cur = &head;
+	while (!equal(tok, "}"))
+		cur = cur->next = stmt(&tok, tok);
+
+	struct node *node = new_node(ND_BLOCK);
+	node->body = head.next;
+	*rest = tok->next;
+	return node;
 }
 
 // expr-stmt = expr ";"
@@ -286,14 +308,10 @@ primary(struct token **rest, struct token *tok)
 struct function *
 parse(struct token *tok)
 {
-	struct node head = {0};
-	struct node *cur = &head;
-
-	while (tok->kind != TK_EOF)
-		cur = cur->next = stmt(&tok, tok);
+	tok = skip(tok, "{");
 
 	struct function *prog = calloc(1, sizeof(struct function));
-	prog->body = head.next;
+	prog->body = compound_stmt(&tok, tok);
 	prog->locals = locals;
 	return prog;
 }

@@ -72,6 +72,7 @@ enum node_kind {
 	ND_LE,        // <=
 	ND_ASSIGN,    // =
 	ND_RETURN,    // “return”
+	ND_BLOCK,     // { ... }
 	ND_EXPR_STMT, // expression statement
 	ND_VAR,       // variable
 	ND_NUM,       // integer
@@ -82,8 +83,12 @@ struct node {
 	struct node *next;   // next node
 	struct node *lhs;    // left-hand side
 	struct node *rhs;    // right-hand side
-	struct var *var;     // used if kind == ND_VAR
-	int val;             // used if kind == ND_NUM
+
+	// Block
+	struct node *body;
+
+	struct var *var; // used if kind == ND_VAR
+	int val;         // used if kind == ND_NUM
 };
 
 struct function *
