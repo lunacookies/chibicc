@@ -94,6 +94,14 @@ is_ident2(char c)
 	return is_ident1(c) || ('0' <= c && c <= '9');
 }
 
+static void
+convert_keywords(struct token *tok)
+{
+	for (struct token *t = tok; t->kind != TK_EOF; t = t->next)
+		if (equal(t, "return"))
+			t->kind = TK_RESERVED;
+}
+
 // Tokenizes `current_input` and returns new tokens.
 struct token *
 tokenize(char *p)
@@ -118,7 +126,7 @@ tokenize(char *p)
 			continue;
 		}
 
-		// Identifier
+		// Identifier or keyword
 		if (is_ident1(*p)) {
 			char *q = p++;
 			while (is_ident2(*p))
@@ -145,5 +153,6 @@ tokenize(char *p)
 	}
 
 	new_token(TK_EOF, cur, p, 0);
+	convert_keywords(head.next);
 	return head.next;
 }

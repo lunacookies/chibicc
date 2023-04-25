@@ -36,7 +36,7 @@ static struct var *
 find_var(struct token *tok)
 {
 	for (struct var *var = locals; var; var = var->next)
-		if (strlen(var->name) == tok->len &&
+		if ((int)strlen(var->name) == tok->len &&
 		    !strncmp(tok->loc, var->name, tok->len))
 			return var;
 	return NULL;
@@ -93,10 +93,17 @@ new_lvar(char *name)
 	return var;
 }
 
-// stmt = expr-stmt
+// stmt = "return" expr ";"
+//      | expr-stmt
 static struct node *
 stmt(struct token **rest, struct token *tok)
 {
+	if (equal(tok, "return")) {
+		struct node *node = new_unary(ND_RETURN, expr(&tok, tok->next));
+		*rest = skip(tok, ";");
+		return node;
+	}
+
 	return expr_stmt(rest, tok);
 }
 

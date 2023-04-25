@@ -71,6 +71,7 @@ enum node_kind {
 	ND_LT,        // <
 	ND_LE,        // <=
 	ND_ASSIGN,    // =
+	ND_RETURN,    // “return”
 	ND_EXPR_STMT, // expression statement
 	ND_VAR,       // variable
 	ND_NUM,       // integer
