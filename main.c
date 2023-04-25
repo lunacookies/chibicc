@@ -7,6 +7,8 @@ main(int argc, char **argv)
 		error("%s: invalid number of arguments\n", argv[0]);
 
 	struct token *tok = tokenize(argv[1]);
-	struct node *node = parse(tok);
-	codegen(node);
+	struct function *prog = parse(tok);
+
+	// Traverse the AST to emit assembly.
+	codegen(prog);
 }

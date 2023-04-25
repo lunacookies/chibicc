@@ -16,14 +16,21 @@ pop(char *arg)
 	depth--;
 }
 
+// Round up `n` to the nearest multiple of `align`.
+// For instance, align_to(5, 8) returns 8 and align_to(11, 8) returns 16.
+static int
+align_to(int n, int align)
+{
+	return (n + align - 1) / align * align;
+}
+
 // Compute the absolute address of a given node.
 // It’s an error if a given node does not reside in memory.
 static void
 gen_addr(struct node *node)
 {
 	if (node->kind == ND_VAR) {
-		int offset = (node->name - 'a' + 1) * 8;
-		printf("\tlea\trax, [rbp - %d]\n", offset);
+		printf("\tlea\trax, [rbp + %d]\n", node->var->offset);
 		return;
 	}
 
@@ -107,9 +114,23 @@ gen_stmt(struct node *node)
 	error("invalid statement");
 }
 
-void
-codegen(struct node *node)
+// Assign offsets to local variables.
+static void
+assign_lvar_offsets(struct function *prog)
 {
+	int offset = 0;
+	for (struct var *var = prog->locals; var; var = var->next) {
+		offset += 8;
+		var->offset = -offset;
+	}
+	prog->stack_size = align_to(offset, 16);
+}
+
+void
+codegen(struct function *prog)
+{
+	assign_lvar_offsets(prog);
+
 	printf(".intel_syntax noprefix\n");
 	printf(".global _main\n");
 	printf("_main:\n");
@@ -117,9 +138,9 @@ codegen(struct node *node)
 	// Prologue
 	printf("\tpush\trbp\n");
 	printf("\tmov\trbp, rsp\n");
-	printf("\tsub\trsp, 208\n");
+	printf("\tsub\trsp, %d\n", prog->stack_size);
 
-	for (struct node *n = node; n; n = n->next) {
+	for (struct node *n = prog->body; n; n = n->next) {
 		gen_stmt(n);
 		assert(depth == 0);
 	}

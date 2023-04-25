@@ -1,5 +1,9 @@
 #include "chibicc.h"
 
+// All local variable instances created during parsing
+// are accumulated to this list.
+struct var *locals;
+
 static struct node *
 expr(struct token **rest, struct token *tok);
 
@@ -26,6 +30,17 @@ unary(struct token **rest, struct token *tok);
 
 static struct node *
 primary(struct token **rest, struct token *tok);
+
+// Find a local variable by name.
+static struct var *
+find_var(struct token *tok)
+{
+	for (struct var *var = locals; var; var = var->next)
+		if (strlen(var->name) == tok->len &&
+		    !strncmp(tok->loc, var->name, tok->len))
+			return var;
+	return NULL;
+}
 
 static struct node *
 new_node(enum node_kind kind)
@@ -61,11 +76,21 @@ new_num(int val)
 }
 
 static struct node *
-new_var_node(char name)
+new_var_node(struct var *var)
 {
 	struct node *node = new_node(ND_VAR);
-	node->name = name;
+	node->var = var;
 	return node;
+}
+
+static struct var *
+new_lvar(char *name)
+{
+	struct var *var = calloc(1, sizeof(struct var));
+	var->name = name;
+	var->next = locals;
+	locals = var;
+	return var;
 }
 
 // stmt = expr-stmt
@@ -235,9 +260,11 @@ primary(struct token **rest, struct token *tok)
 	}
 
 	if (tok->kind == TK_IDENT) {
-		struct node *node = new_var_node(*tok->loc);
+		struct var *var = find_var(tok);
+		if (!var)
+			var = new_lvar(strndup(tok->loc, tok->len));
 		*rest = tok->next;
-		return node;
+		return new_var_node(var);
 	}
 
 	if (tok->kind == TK_NUM) {
@@ -249,12 +276,17 @@ primary(struct token **rest, struct token *tok)
 	error_tok(tok, "expected an expression");
 }
 
-struct node *
+struct function *
 parse(struct token *tok)
 {
 	struct node head = {0};
 	struct node *cur = &head;
+
 	while (tok->kind != TK_EOF)
 		cur = cur->next = stmt(&tok, tok);
-	return head.next;
+
+	struct function *prog = calloc(1, sizeof(struct function));
+	prog->body = head.next;
+	prog->locals = locals;
+	return prog;
 }

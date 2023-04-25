@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+struct node;
+
 //
 // tokenize.c
 //
@@ -47,6 +49,18 @@ tokenize(char *input);
 // parse.c
 //
 
+struct var {
+	struct var *next;
+	char *name; // variable name
+	int offset; // offset from rbp
+};
+
+struct function {
+	struct node *body;
+	struct var *locals;
+	int stack_size;
+};
+
 enum node_kind {
 	ND_ADD,       // +
 	ND_SUB,       // -
@@ -67,11 +81,11 @@ struct node {
 	struct node *next;   // next node
 	struct node *lhs;    // left-hand side
 	struct node *rhs;    // right-hand side
-	char name;           // used if kind == ND_VAR
+	struct var *var;     // used if kind == ND_VAR
 	int val;             // used if kind == ND_NUM
 };
 
-struct node *
+struct function *
 parse(struct token *tok);
 
 //
@@ -79,4 +93,4 @@ parse(struct token *tok);
 //
 
 void
-codegen(struct node *node);
+codegen(struct function *prog);
